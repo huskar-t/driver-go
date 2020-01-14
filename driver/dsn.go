@@ -13,10 +13,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package taosSql
+package driver
 
 import (
 	"errors"
+	"github.com/taosdata/driver-go/taos"
 	"net/url"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ import (
 )
 
 var (
-	errInvalidDSNUnescaped = errors.New("invalid DSN: did you forget to escape a param value?")
+	errInvalidDSNUnescaped = errors.New("invalid DSN: did you forget to escape a param value? ")
 	errInvalidDSNAddr      = errors.New("invalid DSN: network address not terminated (missing closing brace)")
 	errInvalidDSNPort      = errors.New("invalid DSN: network port is not a valid number")
 	errInvalidDSNNoSlash   = errors.New("invalid DSN: missing the slash separating the database name")
@@ -35,7 +36,7 @@ var (
 // the NewConfig function should be used, which sets default values.
 type config struct {
 	user              string // Username
-	passwd            string // Password (requires User)
+	password          string // Password (requires User)
 	net               string // Network type
 	addr              string // Network address (requires Net)
 	port              int
@@ -58,7 +59,7 @@ func newConfig() *config {
 
 // ParseDSN parses the DSN string to a Config
 func parseDSN(dsn string) (cfg *config, err error) {
-	taosLog.Println("input dsn:", dsn)
+	taos.Log.Println("input dsn:", dsn)
 
 	// New config with some default values
 	cfg = newConfig()
@@ -81,7 +82,7 @@ func parseDSN(dsn string) (cfg *config, err error) {
 						// Find the first ':' in dsn[:j]
 						for k = 0; k < j; k++ {
 							if dsn[k] == ':' {
-								cfg.passwd = dsn[k+1 : j]
+								cfg.password = dsn[k+1 : j]
 								break
 							}
 						}
@@ -137,7 +138,7 @@ func parseDSN(dsn string) (cfg *config, err error) {
 		return nil, errInvalidDSNNoSlash
 	}
 
-	taosLog.Printf("cfg info: %+v", cfg)
+	taos.Log.Printf("cfg info: %+v", cfg)
 
 	return
 }
@@ -155,7 +156,7 @@ func parseDSNParams(cfg *config, params string) (err error) {
 		switch value := param[1]; param[0] {
 		case "columnsWithAlias":
 			var isBool bool
-			cfg.columnsWithAlias, isBool = readBool(value)
+			cfg.columnsWithAlias, isBool = taos.ReadBool(value)
 			if !isBool {
 				return errors.New("invalid bool value: " + value)
 			}
@@ -163,7 +164,7 @@ func parseDSNParams(cfg *config, params string) (err error) {
 		// Enable client side placeholder substitution
 		case "interpolateParams":
 			var isBool bool
-			cfg.interpolateParams, isBool = readBool(value)
+			cfg.interpolateParams, isBool = taos.ReadBool(value)
 			if !isBool {
 				return errors.New("invalid bool value: " + value)
 			}
@@ -181,7 +182,7 @@ func parseDSNParams(cfg *config, params string) (err error) {
 		// time.Time parsing
 		case "parseTime":
 			var isBool bool
-			cfg.parseTime, isBool = readBool(value)
+			cfg.parseTime, isBool = taos.ReadBool(value)
 			if !isBool {
 				return errors.New("invalid bool value: " + value)
 			}

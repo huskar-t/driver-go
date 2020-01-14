@@ -12,11 +12,12 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package taosSql
+package driver
 
 import (
 	"database/sql/driver"
 	"fmt"
+	"github.com/taosdata/driver-go/taos"
 	"reflect"
 )
 
@@ -36,23 +37,23 @@ func (stmt *taosSqlStmt) NumInput() int {
 }
 
 func (stmt *taosSqlStmt) Exec(args []driver.Value) (driver.Result, error) {
-	if stmt.mc == nil || stmt.mc.taos == nil {
-		return nil, errInvalidConn
+	if stmt.mc == nil || stmt.mc.netConn == nil {
+		return nil, taos.ErrInvalidConn
 	}
 	return stmt.mc.Exec(stmt.pSql, args)
 }
 
 func (stmt *taosSqlStmt) Query(args []driver.Value) (driver.Rows, error) {
-	if  stmt.mc == nil || stmt.mc.taos == nil {
-		return nil, errInvalidConn
+	if  stmt.mc == nil || stmt.mc.netConn == nil {
+		return nil, taos.ErrInvalidConn
 	}
 	return stmt.query(args)
 }
 
 func (stmt *taosSqlStmt) query(args []driver.Value) (*binaryRows, error) {
 	mc := stmt.mc
-	if  mc == nil || mc.taos == nil {
-		return nil, errInvalidConn
+	if  mc == nil || mc.netConn == nil {
+		return nil, taos.ErrInvalidConn
 	}
 
 	querySql := stmt.pSql
@@ -69,13 +70,13 @@ func (stmt *taosSqlStmt) query(args []driver.Value) (*binaryRows, error) {
 		querySql = prepared
 	}
 
-	num_fields, err := mc.taosQuery(querySql)
+	numFields, err := mc.taosQuery(querySql)
 	if err == nil {
 		// Read Result
 		rows := new(binaryRows)
 		rows.mc = mc
 		// Columns field
-		rows.rs.columns, err = mc.readColumns(num_fields)
+		rows.rs.columns, err = mc.readColumns(numFields)
 		return rows, err
 	}
 	return nil, err

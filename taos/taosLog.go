@@ -13,7 +13,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package taosSql
+package taos
 
 import (
 	"bufio"
@@ -27,15 +27,15 @@ import (
 
 // Various errors the driver might return.
 var (
-	errInvalidConn    = errors.New("invalid connection")
-	errConnNoExist    = errors.New("no existent connection ")
+	ErrInvalidConn = errors.New("invalid connection")
+	ErrConnNoExist = errors.New("no existent connection ")
 )
 
-var taosLog *log.Logger
+var Log *log.Logger
 
 // SetLogger is used to set the logger for critical errors.
 // The initial logger
-func taosLogInit() {
+func LogInit() {
 	cfgName := "/etc/taos/taos.cfg"
 	logNameDefault := "/var/log/taos/taosgo.log"
 	var logName string
@@ -59,9 +59,9 @@ func taosLogInit() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	taosLog = log.New(logFile, "", log.LstdFlags)
-	taosLog.SetPrefix("TAOS DRIVER ")
-	taosLog.SetFlags(log.LstdFlags|log.Lshortfile)
+	Log = log.New(logFile, "", log.LstdFlags)
+	Log.SetPrefix("TAOS DRIVER ")
+	Log.SetFlags(log.LstdFlags|log.Lshortfile)
 }
 
 func getLogNameFromCfg(f *os.File) (string, error) {
@@ -98,7 +98,7 @@ func getLogNameFromCfg(f *os.File) (string, error) {
 				continue
 			}
 		} else {
-			ns = s;
+			ns = s
 		}
 
 		ss := strings.Fields(ns)

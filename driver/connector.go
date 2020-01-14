@@ -12,7 +12,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package taosSql
+package driver
 
 import (
 	"context"
@@ -27,18 +27,16 @@ type connector struct {
 // Connect returns a connection to the database.
 func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
 	var err error
- 	// New taosConn
+	// New taosConn
 	mc := &taosConn{
-		cfg:              c.cfg,
-		parseTime:        c.cfg.parseTime,
+		cfg:       c.cfg,
+		parseTime: c.cfg.parseTime,
 	}
-
-	// Connect to Server
-	mc.taos, err = mc.taosConnect(mc.cfg.addr, mc.cfg.user, mc.cfg.passwd, mc.cfg.dbName, mc.cfg.port)
-    if err != nil {
-        return nil, err
-    }
-
+	//build protocol
+	err = mc.taosConnect(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return mc, nil
 }
 

@@ -13,39 +13,47 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package taosSql
+package taos
 
 const (
-	timeFormat              = "2006-01-02 15:04:05"
-    maxTaosSqlLen           = 65380
-	defaultBufSize          = maxTaosSqlLen + 32
+	TimeFormat     = "2006-01-02 15:04:05"
+	MaxTaosSqlLen  = 65380
+	DefaultBufSize = MaxTaosSqlLen + 32
 )
 
-type fieldType byte
+type FieldType byte
 
-type fieldFlag uint16
+type FieldFlag uint16
 
 const (
-	flagNotNULL fieldFlag = 1 << iota
+	FlagNotNULL FieldFlag = 1 << iota
 )
 
-type statusFlag uint16
+type StatusFlag uint16
 
 const (
-	statusInTrans statusFlag = 1 << iota
+	statusInTrans StatusFlag = 1 << iota
 	statusInAutocommit
 	statusReserved // Not in documentation
-	statusMoreResultsExists
+	StatusMoreResultsExists
 	statusNoGoodIndexUsed
 	statusNoIndexUsed
 	statusCursorExists
 	statusLastRowSent
 	statusDbDropped
-	statusNoBackslashEscapes
+	StatusNoBackslashEscapes
 	statusMetadataChanged
 	statusQueryWasSlow
 	statusPsOutParams
 	statusInTransReadonly
 	statusSessionStateChanged
 )
-
+const (
+	TSDB_UNI_LEN        = 24
+	TSDB_USER_LEN       = TSDB_UNI_LEN
+	TSDB_ACCT_LEN       = TSDB_UNI_LEN
+	TSDB_PASSWORD_LEN   = TSDB_UNI_LEN
+	TSDB_METER_NAME_LEN = 64
+	TSDB_DB_NAME_LEN    = 32
+	TSDB_COL_NAME_LEN   = 64
+)

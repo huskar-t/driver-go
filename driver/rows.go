@@ -12,20 +12,13 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package taosSql
-/*
-#cgo CFLAGS : -I/usr/include
-#cgo LDFLAGS: -L/usr/lib -ltaos
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <taos.h>
-*/
+package driver
 import "C"
 
 import (
 	"database/sql"
 	"database/sql/driver"
+	"github.com/taosdata/driver-go/taos"
 	"io"
 	"math"
 	"reflect"
@@ -35,8 +28,8 @@ type taosSqlField struct {
 	tableName string
 	name      string
 	length    uint32
-	flags     fieldFlag   // indicate whether this field can is null
-	fieldType fieldType
+	flags     taos.FieldFlag // indicate whether this field can is null
+	fieldType taos.FieldType
 	decimals  byte
 	charSet   uint8
 }
@@ -94,7 +87,7 @@ func (rows *taosSqlRows) ColumnTypeLength(i int) (length int64, ok bool) {
 }
 
 func (rows *taosSqlRows) ColumnTypeNullable(i int) (nullable, ok bool) {
-	return rows.rs.columns[i].flags&flagNotNULL == 0, true
+	return rows.rs.columns[i].flags&taos.FlagNotNULL == 0, true
 }
 
 func (rows *taosSqlRows) ColumnTypePrecisionScale(i int) (int64, int64, bool) {
@@ -133,7 +126,7 @@ func (rows *taosSqlRows) HasNextResultSet() (b bool) {
 	if rows.mc == nil {
 		return false
 	}
-	return rows.mc.status&statusMoreResultsExists != 0
+	return rows.mc.status&taos.StatusMoreResultsExists != 0
 }
 
 func (rows *taosSqlRows) nextResultSet() (int, error) {
@@ -252,7 +245,7 @@ var (
 	scanTypeInt16     = reflect.TypeOf(int16(0))
 	scanTypeInt32     = reflect.TypeOf(int32(0))
 	scanTypeInt64     = reflect.TypeOf(int64(0))
-	scanTypeNullTime  = reflect.TypeOf(NullTime{})
+	scanTypeNullTime  = reflect.TypeOf(taos.NullTime{})
 	scanTypeRawBytes  = reflect.TypeOf(sql.RawBytes{})
 	scanTypeUnknown   = reflect.TypeOf(new(interface{}))
 )

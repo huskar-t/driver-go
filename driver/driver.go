@@ -12,12 +12,13 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package taosSql
+package driver
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"github.com/taosdata/driver-go/taos"
 )
 
 // taosSqlDriver is exported to make the driver directly accessible.
@@ -38,6 +39,6 @@ func (d taosSQLDriver) Open(dsn string) (driver.Conn, error) {
 }
 
 func init() {
-	sql.Register("taosSql", &taosSQLDriver{})
-	taosLogInit()
+	sql.Register("driver", &taosSQLDriver{})
+	taos.LogInit()
 }

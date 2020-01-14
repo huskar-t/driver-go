@@ -12,22 +12,15 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package taosSql
+package driver
 
-/*
-#cgo CFLAGS : -I/usr/include
-#cgo LDFLAGS: -L/usr/lib -ltaos
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <taos.h>
-*/
 import "C"
 
 import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"github.com/taosdata/driver-go/taos"
 	"io"
 	"strconv"
 	"time"
@@ -42,7 +35,7 @@ func (mc *taosConn) readColumns(count int) ([]taosSqlField, error) {
 
 	columns := make([]taosSqlField, count)
 	var result unsafe.Pointer
-	result = C.taos_use_result(mc.taos)
+	result = C.taos_use_result(mc.netConn)
 	if result == nil {
 		return nil, errors.New("invalid result")
 	}
@@ -66,7 +59,7 @@ func (mc *taosConn) readColumns(count int) ([]taosSqlField, error) {
 		}
 		columns[i].name = string(charray)
 		columns[i].length = (uint32)(fields[i].bytes)
-		columns[i].fieldType = fieldType(fields[i]._type)
+		columns[i].fieldType = taos.FieldType(fields[i]._type)
 		columns[i].flags = 0
 		// columns[i].decimals  = 0
 		//columns[i].charSet    = 0
@@ -82,9 +75,9 @@ func (rows *taosSqlRows) readRow(dest []driver.Value) error {
 	}
 
 	var result unsafe.Pointer
-	result = C.taos_use_result(mc.taos)
+	result = C.taos_use_result(mc.netConn)
 	if result == nil {
-		return errors.New(C.GoString(C.taos_errstr(mc.taos)))
+		return errors.New(C.GoString(C.taos_errstr(mc.netConn)))
 	}
 
 	//var row *unsafe.Pointer
@@ -191,10 +184,10 @@ func timestampConvertToString(timestamp int64, precision int) string {
 		nsVal = decimal * 1000000
 	}
 
-	date_time := time.Unix(sVal, nsVal)
+	dateTime := time.Unix(sVal, nsVal)
 
 	//const base_format = "2006-01-02 15:04:05"
-	str_time := date_time.Format(timeFormat)
+	strTime := dateTime.Format(taos.TimeFormat)
 
-	return (str_time + "." + strconv.Itoa(int(decimal)))
+	return strTime + "." + strconv.Itoa(int(decimal))
 }

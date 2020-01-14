@@ -12,16 +12,8 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package taosSql
+package taos
 
-/*
-#cgo CFLAGS : -I/usr/include
-#include <stdlib.h>
-#cgo LDFLAGS: -L/usr/lib -ltaos
-void taosSetAllocMode(int mode, const char* path, _Bool autoDump);
-void taosDumpMemoryLeak();
-*/
-import "C"
 
 
 import (
@@ -30,12 +22,11 @@ import (
 	"fmt"
 	"sync/atomic"
 	"time"
-	"unsafe"
 )
 
 // Returns the bool value of the input.
 // The 2nd return value indicates if the input was a valid bool value
-func readBool(input string) (value bool, valid bool) {
+func ReadBool(input string) (value bool, valid bool) {
 	switch input {
 	case "1", "true", "TRUE", "True":
 		return true, true
@@ -85,16 +76,16 @@ func (nt *NullTime) Scan(value interface{}) (err error) {
 		return
 	case []byte:
 		nt.Time, err = parseDateTime(string(v), time.UTC)
-		nt.Valid = (err == nil)
+		nt.Valid = err == nil
 		return
 	case string:
 		nt.Time, err = parseDateTime(v, time.UTC)
-		nt.Valid = (err == nil)
+		nt.Valid = err == nil
 		return
 	}
 
 	nt.Valid = false
-	return fmt.Errorf("Can't convert %T to time.Time", value)
+	return fmt.Errorf("can't convert %T to time.Time", value)
 }
 
 // Value implements the driver Valuer interface.
@@ -112,7 +103,7 @@ func parseDateTime(str string, loc *time.Location) (t time.Time, err error) {
 		if str == base[:len(str)] {
 			return
 		}
-		t, err = time.Parse(timeFormat[:len(str)], str)
+		t, err = time.Parse(TimeFormat[:len(str)], str)
 	default:
 		err = fmt.Errorf("invalid time string: %s", str)
 		return
@@ -134,14 +125,14 @@ func parseDateTime(str string, loc *time.Location) (t time.Time, err error) {
 // The current behavior depends on database/sql copying the result.
 var zeroDateTime = []byte("0000-00-00 00:00:00.000000")
 
-const digits01 = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
-const digits10 = "0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999"
+const Digits01 = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
+const Digits10 = "0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999"
 
 /******************************************************************************
 *                       Convert from and to bytes                             *
 ******************************************************************************/
 
-func uint64ToBytes(n uint64) []byte {
+func Uint64ToBytes(n uint64) []byte {
 	return []byte{
 		byte(n),
 		byte(n >> 8),
@@ -154,7 +145,7 @@ func uint64ToBytes(n uint64) []byte {
 	}
 }
 
-func uint64ToString(n uint64) []byte {
+func Uint64ToString(n uint64) []byte {
 	var a [20]byte
 	i := 20
 
@@ -177,7 +168,7 @@ func uint64ToString(n uint64) []byte {
 }
 
 // treats string value as unsigned integer representation
-func stringToInt(b []byte) int {
+func StringToInt(b []byte) int {
 	val := 0
 	for i := range b {
 		val *= 10
@@ -203,7 +194,7 @@ func reserveBuffer(buf []byte, appendSize int) []byte {
 // This escapes the contents of a string (provided as []byte) by adding backslashes before special
 // characters, and turning others into specific escape sequences, such as
 // turning newlines into \n and null bytes into \0.
-func escapeBytesBackslash(buf, v []byte) []byte {
+func EscapeBytesBackslash(buf, v []byte) []byte {
 	pos := len(buf)
 	buf = reserveBuffer(buf, len(v)*2)
 	for _, c := range v {
@@ -245,7 +236,7 @@ func escapeBytesBackslash(buf, v []byte) []byte {
 }
 
 // escapeStringBackslash is similar to escapeBytesBackslash but for string.
-func escapeStringBackslash(buf []byte, v string) []byte {
+func EscapeStringBackslash(buf []byte, v string) []byte {
 	pos := len(buf)
 	buf = reserveBuffer(buf, len(v)*2)
 
@@ -293,7 +284,7 @@ func escapeStringBackslash(buf []byte, v string) []byte {
 // This escapes the contents of a string by doubling up any apostrophes that
 // it contains. This is used when the NO_BACKSLASH_ESCAPES SQL_MODE is in
 // effect on the server.
-func escapeBytesQuotes(buf, v []byte) []byte {
+func EscapeBytesQuotes(buf, v []byte) []byte {
 	pos := len(buf)
 	buf = reserveBuffer(buf, len(v)*2)
 
@@ -312,7 +303,7 @@ func escapeBytesQuotes(buf, v []byte) []byte {
 }
 
 // escapeStringQuotes is similar to escapeBytesQuotes but for string.
-func escapeStringQuotes(buf []byte, v string) []byte {
+func EscapeStringQuotes(buf []byte, v string) []byte {
 	pos := len(buf)
 	buf = reserveBuffer(buf, len(v)*2)
 
@@ -395,28 +386,15 @@ func (ae *atomicError) Value() error {
 	return nil
 }
 
-func namedValueToValue(named []driver.NamedValue) ([]driver.Value, error) {
+func NamedValueToValue(named []driver.NamedValue) ([]driver.Value, error) {
 	dargs := make([]driver.Value, len(named))
 	for n, param := range named {
 		if len(param.Name) > 0 {
 			// TODO: support the use of Named Parameters #561
-			return nil, errors.New("taosSql: driver does not support the use of Named Parameters")
+			return nil, errors.New("driver: driver does not support the use of Named Parameters")
 		}
 		dargs[n] = param.Value
 	}
 	return dargs, nil
 }
 
-
-/******************************************************************************
-*                     Utils for C memory issues debugging                     *
-******************************************************************************/
-func SetAllocMode(mode int32, path string) {
-	cpath := C.CString(path)
-	defer C.free(unsafe.Pointer(cpath))
-	C.taosSetAllocMode(C.int(mode), cpath, false)
-}
-
-func DumpMemoryLeak() {
-	C.taosDumpMemoryLeak()
-}
