@@ -59,7 +59,6 @@ func newConfig() *config {
 
 // ParseDSN parses the DSN string to a Config
 func parseDSN(dsn string) (cfg *config, err error) {
-	taos.Log.Println("input dsn:", dsn)
 
 	// New config with some default values
 	cfg = newConfig()
@@ -103,12 +102,12 @@ func parseDSN(dsn string) (cfg *config, err error) {
 							}
 							return nil, errInvalidDSNAddr
 						}
-						strs := strings.Split(dsn[k+1:i-1], ":")
-						if len(strs) == 1 {
+						strS := strings.Split(dsn[k+1:i-1], ":")
+						if len(strS) == 1 {
 							return nil, errInvalidDSNAddr
 						}
-						cfg.addr = strs[0]
-						cfg.port, err = strconv.Atoi(strs[1])
+						cfg.addr = strS[0]
+						cfg.port, err = strconv.Atoi(strS[1])
 						if err != nil {
 							return nil, errInvalidDSNPort
 						}
@@ -137,9 +136,6 @@ func parseDSN(dsn string) (cfg *config, err error) {
 	if !foundSlash && len(dsn) > 0 {
 		return nil, errInvalidDSNNoSlash
 	}
-
-	taos.Log.Printf("cfg info: %+v", cfg)
-
 	return
 }
 

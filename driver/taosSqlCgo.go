@@ -27,11 +27,13 @@ import "C"
 import (
 	"context"
 	"crypto/md5"
+	"database/sql/driver"
 	"errors"
 	"github.com/taosdata/driver-go/taos"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -40,14 +42,14 @@ type SConnectMsg struct {
 	DB            string
 }
 
-func (mc *taosConn) taosConnect(ctx context.Context) error {
+func (tc *taosConn) taosConnect(ctx context.Context) error {
 	//check ip
-	ip := mc.cfg.addr
-	user := mc.cfg.user
-	pass := mc.cfg.password
-	db := mc.cfg.dbName
+	ip := tc.cfg.addr
+	user := tc.cfg.user
+	pass := tc.cfg.password
+	db := tc.cfg.dbName
 	if ip == "" || ip == "127.0.0.1" || ip == "localhost" {
-		mc.cfg.addr = "127.0.0.1"
+		tc.cfg.addr = "127.0.0.1"
 	}
 	//check user
 	if user == "" || len(user) > taos.TSDB_USER_LEN {
@@ -63,8 +65,8 @@ func (mc *taosConn) taosConnect(ctx context.Context) error {
 	encodePassword := h.Sum(nil)
 
 	//check port
-	if mc.cfg.port == 0 {
-		mc.cfg.port = 6030
+	if tc.cfg.port == 0 {
+		tc.cfg.port = 6030
 	}
 	//check db
 	if db != "" {
@@ -72,57 +74,66 @@ func (mc *taosConn) taosConnect(ctx context.Context) error {
 			return taos.GetErrorStr(taos.TSDB_CODE_INVALID_DB)
 		}
 		db = strings.ToLower(db)
-		mc.cfg.dbName = db
+		tc.cfg.dbName = db
 	}
-	mc.rpcProtocol = taos.NewRpcProtocol(user, db, encodePassword)
+	tc.rpcProtocol = taos.NewRpcProtocol(user, db, encodePassword)
 	// Connect to Server
 	nd := net.Dialer{}
 	var err error
-	//mc.netConn, err = nd.DialContext(ctx, mc.cfg.net, fmt.Sprintf("%s:%d",mc.cfg.addr, &mc.cfg.port))
-	mc.netConn, err = nd.DialContext(ctx, "udp", net.JoinHostPort(mc.cfg.addr, strconv.Itoa(mc.cfg.port)))
+	//tc.netConn, err = nd.DialContext(ctx, tc.cfg.net, fmt.Sprintf("%s:%d",tc.cfg.addr, &tc.cfg.port))
+	tc.netConn, err = nd.DialContext(ctx, "udp", net.JoinHostPort(tc.cfg.addr, strconv.Itoa(tc.cfg.port)))
 	if err != nil {
 		return err
 	}
-	data, err := mc.rpcProtocol.GetReqMsg("connect", nil)
+	data, err := tc.rpcProtocol.GetReqMsg(taos.TSDB_SQL_CONNECT, nil)
 	if err != nil {
 		return err
 	}
-	_, err = mc.netConn.Write(data)
+	_, err = tc.netConn.Write(data)
 	return err
 }
 
-func (mc *taosConn) taosQuery(sqlstr string) (int, error) {
-	//taosLog.Printf("taosQuery() input sql:%s\n", sqlstr)
-
-	csqlstr := C.CString(sqlstr)
-	defer C.free(unsafe.Pointer(csqlstr))
-	code := int(C.taos_query(mc.taos, csqlstr))
+func (tc *taosConn) taosQuery(sqlStr string) (int, error) {
+	cSqlStr := C.CString(sqlStr)
+	defer C.free(unsafe.Pointer(cSqlStr))
+	code := int(C.taos_query(tc.netConn, cSqlStr))
 
 	if 0 != code {
-		mc.taosError()
-		errStr := C.GoString(C.taos_errstr(mc.taos))
-		taos.Log.Println("taos_query() failed:", errStr)
-		taos.Log.Printf("taosQuery() input sql:%s\n", sqlstr)
+		tc.taosError()
+		errStr := C.GoString(C.taos_errstr(tc.netConn))
+		errLog.Print("taos_query() failed:", errStr)
+		errLog.Print("taosQuery() input sql:%s\n", sqlStr)
 		return 0, errors.New(errStr)
 	}
 
-	// read result and save into mc struct
-	numFields := int(C.taos_field_count(mc.taos))
+	// read result and save into tc struct
+	numFields := int(C.taos_field_count(tc.netConn))
 	if 0 == numFields { // there are no select and show kinds of commands
-		mc.affectedRows = int(C.taos_affected_rows(mc.taos))
-		mc.insertId = 0
+		tc.affectedRows = int(C.taos_affected_rows(tc.netConn))
+		tc.insertId = 0
 	}
 
 	return numFields, nil
 }
 
-func (mc *taosConn) taosClose() {
-	C.taos_close(mc.taos)
-}
-
-func (mc *taosConn) taosError() {
+func (tc *taosConn) taosError() {
 	// free local resouce: allocated memory/metric-meta refcnt
 	//var pRes unsafe.Pointer
-	pRes := C.taos_use_result(mc.taos)
+	pRes := C.taos_use_result(tc.netConn)
 	C.taos_free_result(pRes)
+}
+
+func (tc *taosConn) heartbeat() {
+	heartbeatTicker := time.NewTicker(time.Millisecond * 500 * 3)
+	for range heartbeatTicker.C {
+		if tc.netConn == nil {
+			errLog.Print(driver.ErrBadConn)
+			return
+		}
+		data, err := tc.rpcProtocol.GetReqMsg(taos.TSDB_SQL_HB, nil)
+		if err != nil {
+			return
+		}
+		_, _ = tc.netConn.Write(data)
+	}
 }

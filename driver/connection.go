@@ -51,43 +51,39 @@ func (res *taosSqlResult) RowsAffected() (int64, error) {
 	return res.affectedRows, nil
 }
 
-func (mc *taosConn) Begin() (driver.Tx, error) {
-	taos.Log.Println("driver not support transaction")
+func (tc *taosConn) Begin() (driver.Tx, error) {
 	return nil, errors.New("driver not support transaction")
 }
 
-func (mc *taosConn) Close() (err error) {
-	if mc.netConn == nil {
-		return taos.ErrConnNoExist
+func (tc *taosConn) Close() (err error) {
+	if tc.netConn == nil {
+		return ErrConnNoExist
 	}
-	err = mc.netConn.Close()
+	err = tc.netConn.Close()
 	if err != nil {
 		return err
 	}
-	mc.netConn = nil
+	tc.netConn = nil
 	return nil
 }
 
-func (mc *taosConn) Prepare(query string) (driver.Stmt, error) {
-	if mc.netConn == nil {
-		return nil, taos.ErrInvalidConn
+func (tc *taosConn) Prepare(query string) (driver.Stmt, error) {
+	if tc.netConn == nil {
+		errLog.Print(ErrInvalidConn)
+		return nil, driver.ErrBadConn
 	}
 
 	stmt := &taosSqlStmt{
-		mc:   mc,
+		tc:   tc,
 		pSql: query,
 	}
 
 	// find ? count and save  to stmt.paramCount
 	stmt.paramCount = strings.Count(query, "?")
-
-	//fmt.Printf("prepare alloc stmt:%p, sql:%s\n", stmt, query)
-	taos.Log.Printf("prepare alloc stmt:%p, sql:%s\n", stmt, query)
-
 	return stmt, nil
 }
 
-func (mc *taosConn) interpolateParams(query string, args []driver.Value) (string, error) {
+func (tc *taosConn) interpolateParams(query string, args []driver.Value) (string, error) {
 	// Number of ? should be same to len(args)
 	if strings.Count(query, "?") != len(args) {
 		return "", driver.ErrSkip
@@ -132,7 +128,7 @@ func (mc *taosConn) interpolateParams(query string, args []driver.Value) (string
 			if v.IsZero() {
 				buf = append(buf, "'0000-00-00'"...)
 			} else {
-				v := v.In(mc.cfg.loc)
+				v := v.In(tc.cfg.loc)
 				v = v.Add(time.Nanosecond * 500) // To round under microsecond
 				year := v.Year()
 				year100 := year / 100
@@ -178,7 +174,7 @@ func (mc *taosConn) interpolateParams(query string, args []driver.Value) (string
 				buf = append(buf, "NULL"...)
 			} else {
 				buf = append(buf, "_binary'"...)
-				if mc.status&taos.StatusNoBackslashEscapes == 0 {
+				if tc.status&taos.StatusNoBackslashEscapes == 0 {
 					buf = taos.EscapeBytesBackslash(buf, v)
 				} else {
 					buf = taos.EscapeBytesQuotes(buf, v)
@@ -187,7 +183,7 @@ func (mc *taosConn) interpolateParams(query string, args []driver.Value) (string
 			}
 		case string:
 			//buf = append(buf, '\'')
-			if mc.status&taos.StatusNoBackslashEscapes == 0 {
+			if tc.status&taos.StatusNoBackslashEscapes == 0 {
 				buf = taos.EscapeStringBackslash(buf, v)
 			} else {
 				buf = taos.EscapeStringQuotes(buf, v)
@@ -197,7 +193,7 @@ func (mc *taosConn) interpolateParams(query string, args []driver.Value) (string
 			return "", driver.ErrSkip
 		}
 
-		//if len(buf)+4 > mc.maxAllowedPacket {
+		//if len(buf)+4 > tc.maxAllowedPacket {
 		if len(buf)+4 > taos.MaxTaosSqlLen {
 			return "", driver.ErrSkip
 		}
@@ -208,85 +204,85 @@ func (mc *taosConn) interpolateParams(query string, args []driver.Value) (string
 	return string(buf), nil
 }
 
-func (mc *taosConn) Exec(query string, args []driver.Value) (driver.Result, error) {
-	if mc.netConn == nil {
+func (tc *taosConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+	if tc.netConn == nil {
 		return nil, driver.ErrBadConn
 	}
 	if len(args) != 0 {
-		if !mc.cfg.interpolateParams {
+		if !tc.cfg.interpolateParams {
 			return nil, driver.ErrSkip
 		}
 		// try to interpolate the parameters to save extra roundtrips for preparing and closing a statement
-		prepared, err := mc.interpolateParams(query, args)
+		prepared, err := tc.interpolateParams(query, args)
 		if err != nil {
 			return nil, err
 		}
 		query = prepared
 	}
 
-	mc.affectedRows = 0
-	mc.insertId = 0
-	_, err := mc.taosQuery(query)
+	tc.affectedRows = 0
+	tc.insertId = 0
+	_, err := tc.taosQuery(query)
 	if err == nil {
 		return &taosSqlResult{
-			affectedRows: int64(mc.affectedRows),
-			insertId:     int64(mc.insertId),
+			affectedRows: int64(tc.affectedRows),
+			insertId:     int64(tc.insertId),
 		}, err
 	}
 
 	return nil, err
 }
 
-func (mc *taosConn) Query(query string, args []driver.Value) (driver.Rows, error) {
-	return mc.query(query, args)
+func (tc *taosConn) Query(query string, args []driver.Value) (driver.Rows, error) {
+	return tc.query(query, args)
 }
 
-func (mc *taosConn) query(query string, args []driver.Value) (*textRows, error) {
-	if mc.netConn == nil {
+func (tc *taosConn) query(query string, args []driver.Value) (*textRows, error) {
+	if tc.netConn == nil {
 		return nil, driver.ErrBadConn
 	}
 	if len(args) != 0 {
-		if !mc.cfg.interpolateParams {
+		if !tc.cfg.interpolateParams {
 			return nil, driver.ErrSkip
 		}
 		// try client-side prepare to reduce roundtrip
-		prepared, err := mc.interpolateParams(query, args)
+		prepared, err := tc.interpolateParams(query, args)
 		if err != nil {
 			return nil, err
 		}
 		query = prepared
 	}
 
-	numFields, err := mc.taosQuery(query)
+	numFields, err := tc.taosQuery(query)
 	if err == nil {
 		// Read Result
 		rows := new(textRows)
-		rows.mc = mc
+		rows.mc = tc
 
 		// Columns field
-		rows.rs.columns, err = mc.readColumns(numFields)
+		rows.rs.columns, err = tc.readColumns(numFields)
 		return rows, err
 	}
 	return nil, err
 }
 
 // Ping implements driver.Pinger interface
-func (mc *taosConn) Ping(ctx context.Context) (err error) {
-	if mc.netConn != nil {
+func (tc *taosConn) Ping(ctx context.Context) (err error) {
+	if tc.netConn != nil {
 		return nil
 	}
-	return taos.ErrInvalidConn
+	return ErrInvalidConn
 }
 
 // BeginTx implements driver.ConnBeginTx interface
-func (mc *taosConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-	taos.Log.Println("driver not support transaction")
+func (tc *taosConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	errLog.Print("driver not support transaction")
 	return nil, errors.New("driver not support transaction")
 }
 
-func (mc *taosConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	if mc.netConn == nil {
-		return nil, taos.ErrInvalidConn
+func (tc *taosConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	if tc.netConn == nil {
+		return nil, ErrInvalidConn
 	}
 
 	dargs, err := taos.NamedValueToValue(args)
@@ -294,7 +290,7 @@ func (mc *taosConn) QueryContext(ctx context.Context, query string, args []drive
 		return nil, err
 	}
 
-	rows, err := mc.query(query, dargs)
+	rows, err := tc.query(query, dargs)
 	if err != nil {
 		return nil, err
 	}
@@ -302,9 +298,9 @@ func (mc *taosConn) QueryContext(ctx context.Context, query string, args []drive
 	return rows, err
 }
 
-func (mc *taosConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	if mc.netConn == nil {
-		return nil, taos.ErrInvalidConn
+func (tc *taosConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	if tc.netConn == nil {
+		return nil, ErrInvalidConn
 	}
 
 	dargs, err := taos.NamedValueToValue(args)
@@ -312,15 +308,15 @@ func (mc *taosConn) ExecContext(ctx context.Context, query string, args []driver
 		return nil, err
 	}
 
-	return mc.Exec(query, dargs)
+	return tc.Exec(query, dargs)
 }
 
-func (mc *taosConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
-	if mc.netConn == nil {
-		return nil, taos.ErrInvalidConn
+func (tc *taosConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	if tc.netConn == nil {
+		return nil, ErrInvalidConn
 	}
 
-	stmt, err := mc.Prepare(query)
+	stmt, err := tc.Prepare(query)
 	if err != nil {
 		return nil, err
 	}
@@ -329,8 +325,8 @@ func (mc *taosConn) PrepareContext(ctx context.Context, query string) (driver.St
 }
 
 func (stmt *taosSqlStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	if stmt.mc == nil {
-		return nil, taos.ErrInvalidConn
+	if stmt.tc == nil {
+		return nil, ErrInvalidConn
 	}
 	dargs, err := taos.NamedValueToValue(args)
 
@@ -346,8 +342,8 @@ func (stmt *taosSqlStmt) QueryContext(ctx context.Context, args []driver.NamedVa
 }
 
 func (stmt *taosSqlStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	if stmt.mc == nil {
-		return nil, taos.ErrInvalidConn
+	if stmt.tc == nil {
+		return nil, ErrInvalidConn
 	}
 
 	dargs, err := taos.NamedValueToValue(args)
@@ -358,17 +354,17 @@ func (stmt *taosSqlStmt) ExecContext(ctx context.Context, args []driver.NamedVal
 	return stmt.Exec(dargs)
 }
 
-func (mc *taosConn) CheckNamedValue(nv *driver.NamedValue) (err error) {
+func (tc *taosConn) CheckNamedValue(nv *driver.NamedValue) (err error) {
 	nv.Value, err = converter{}.ConvertValue(nv.Value)
 	return
 }
 
 // ResetSession implements driver.SessionResetter.
 // (From Go 1.10)
-func (mc *taosConn) ResetSession(ctx context.Context) error {
-	if mc.netConn == nil {
+func (tc *taosConn) ResetSession(ctx context.Context) error {
+	if tc.netConn == nil {
 		return driver.ErrBadConn
 	}
-	mc.reset = true
+	tc.reset = true
 	return nil
 }

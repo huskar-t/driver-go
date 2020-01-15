@@ -12,31 +12,31 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
 package driver
 
 import (
-	"context"
-	"database/sql"
-	"database/sql/driver"
+	"errors"
+	"log"
+	"os"
 )
 
-// taosSqlDriver is exported to make the driver directly accessible.
-// In general the driver is used via the database/sql package.
-type taosSQLDriver struct{}
+// Various errors the driver might return.
+var (
+	ErrInvalidConn = errors.New("invalid connection")
+	ErrConnNoExist = errors.New("no existent connection ")
+)
 
-// Open new Connection.
-// the DSN string is formatted
-func (d taosSQLDriver) Open(dsn string) (driver.Conn, error) {
-	cfg, err := parseDSN(dsn)
-	if err != nil {
-		return nil, err
-	}
-	c := &connector{
-		cfg: cfg,
-	}
-	return c.Connect(context.Background())
+type Logger interface {
+	Print(v ...interface{})
 }
 
-func init() {
-	sql.Register("driver", &taosSQLDriver{})
+var errLog = Logger(log.New(os.Stderr, "[taos] ", log.Ldate|log.Ltime|log.Lshortfile))
+
+func SetLogger(logger Logger) error {
+	if logger == nil {
+		return errors.New("logger is nil")
+	}
+	errLog = logger
+	return nil
 }

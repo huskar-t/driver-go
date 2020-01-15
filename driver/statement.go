@@ -17,12 +17,11 @@ package driver
 import (
 	"database/sql/driver"
 	"fmt"
-	"github.com/taosdata/driver-go/taos"
 	"reflect"
 )
 
 type taosSqlStmt struct {
-	mc         *taosConn
+	tc         *taosConn
 	id         uint32
 	pSql       string
 	paramCount int
@@ -37,23 +36,23 @@ func (stmt *taosSqlStmt) NumInput() int {
 }
 
 func (stmt *taosSqlStmt) Exec(args []driver.Value) (driver.Result, error) {
-	if stmt.mc == nil || stmt.mc.netConn == nil {
-		return nil, taos.ErrInvalidConn
+	if stmt.tc == nil || stmt.tc.netConn == nil {
+		return nil, ErrInvalidConn
 	}
-	return stmt.mc.Exec(stmt.pSql, args)
+	return stmt.tc.Exec(stmt.pSql, args)
 }
 
 func (stmt *taosSqlStmt) Query(args []driver.Value) (driver.Rows, error) {
-	if  stmt.mc == nil || stmt.mc.netConn == nil {
-		return nil, taos.ErrInvalidConn
+	if stmt.tc == nil || stmt.tc.netConn == nil {
+		return nil, ErrInvalidConn
 	}
 	return stmt.query(args)
 }
 
 func (stmt *taosSqlStmt) query(args []driver.Value) (*binaryRows, error) {
-	mc := stmt.mc
-	if  mc == nil || mc.netConn == nil {
-		return nil, taos.ErrInvalidConn
+	mc := stmt.tc
+	if mc == nil || mc.netConn == nil {
+		return nil, ErrInvalidConn
 	}
 
 	querySql := stmt.pSql

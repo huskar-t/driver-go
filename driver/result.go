@@ -31,11 +31,11 @@ import (
 *                              Result                                         *
 ******************************************************************************/
 // Read Packets as Field Packets until EOF-Packet or an Error appears
-func (mc *taosConn) readColumns(count int) ([]taosSqlField, error) {
+func (tc *taosConn) readColumns(count int) ([]taosSqlField, error) {
 
 	columns := make([]taosSqlField, count)
 	var result unsafe.Pointer
-	result = C.taos_use_result(mc.netConn)
+	result = C.taos_use_result(tc.netConn)
 	if result == nil {
 		return nil, errors.New("invalid result")
 	}

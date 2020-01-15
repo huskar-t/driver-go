@@ -10,8 +10,9 @@ import (
 
 type protocolBuilder func(RpcProtocol RpcProtocol, Content []byte) ([]byte, error)
 
-var reqProtocolMap = map[string]protocolBuilder{
-	"connect": RpcProtocol.connectMsgReq,
+var reqProtocolMap = map[int]protocolBuilder{
+	TSDB_SQL_CONNECT: RpcProtocol.tscBuildConnectMsg,
+	TSDB_SQL_HB:      RpcProtocol.tscBuildHeartBeatMsg,
 }
 
 type RpcProtocol struct {
@@ -36,7 +37,7 @@ type STaosHeader struct {
 	Content  []byte
 }
 
-func (rpcProtocol *RpcProtocol) GetReqMsg(MsgType string, content []byte) ([]byte, error) {
+func (rpcProtocol *RpcProtocol) GetReqMsg(MsgType int, content []byte) ([]byte, error) {
 	builder := reqProtocolMap[MsgType]
 	return builder(*rpcProtocol, content)
 }
@@ -96,15 +97,7 @@ func (rpcProtocol *RpcProtocol) addDigest(data []byte) error {
 	}
 	return nil
 }
-func (rpcProtocol *RpcProtocol) connectMsgReq(Content []byte) ([]byte, error) {
-	connectMsg := make([]byte, 0xb9)
-	copy(connectMsg, rpcProtocol.BaseMsg)
-	err := rpcProtocol.addDigest(connectMsg)
-	if err != nil {
-		return nil, err
-	}
-	return connectMsg, nil
-}
+
 func NewRpcProtocol(user, db string, encodePassword []byte) *RpcProtocol {
 	var rpcProtocol RpcProtocol
 	meterID := [24]byte{}
