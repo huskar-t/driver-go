@@ -18,6 +18,7 @@ var reqProtocolMap = map[int]protocolBuilder{
 type RpcProtocol struct {
 	EncodePassword []byte //16
 	BaseMsg        []byte //base on connect
+	DB             [117]byte
 }
 type STaosHeader struct {
 	Version  byte //4
@@ -33,8 +34,8 @@ type STaosHeader struct {
 	Port     uint16
 	Empty    byte
 	MsgType  uint8
-	MsgLen   uint32 //185总数据长度 ?+48+len(auth)(4+16)=185 ?=185-48-20=117 185为空content 其他在此基础上加具体见taosmsg.h
-	Content  []byte
+	MsgLen   uint32 //185初始总数据长度  其他在此基础上加content 具体见taosmsg.h
+	//Content  []byte
 }
 
 func (rpcProtocol *RpcProtocol) GetReqMsg(MsgType int, content []byte) ([]byte, error) {
@@ -118,10 +119,12 @@ func NewRpcProtocol(user, db string, encodePassword []byte) *RpcProtocol {
 		Port:     0x0,
 		Empty:    0x0,
 		MsgType:  0x1f,
-		MsgLen:   0xb9,
-		Content:  []byte{},
+		//MsgLen:   0xb9,
+		MsgLen: 48 + TSDB_METER_ID_LEN + 4 + 16, //48基础线程信息+117数据库信息+4时间戳+16位秘钥
+		//Content:  []byte{},
 	}
 	rpcProtocol.EncodePassword = encodePassword
+	rpcProtocol.DB = [117]byte{}
 	rpcProtocol.InitMsgBytes(initHeader)
 	return &rpcProtocol
 }
