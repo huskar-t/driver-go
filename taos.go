@@ -4,8 +4,13 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
+	"unsafe"
 )
 
+//1字节     uint8_t
+//2字节     uint16_t
+//4字节     uint32_t
+//8字节     uint64_t
 type STaosHeader struct {
 	Version  byte //4
 	Comp     byte //4
@@ -26,6 +31,7 @@ type STaosHeader struct {
 
 //import _ "github.com/taosdata/driver-go/driver"
 func main() {
+	fmt.Println(unsafe.Sizeof(int32(0)))
 	a := STaosHeader{
 		Version:  0x1,
 		Comp:     0x0,
@@ -34,16 +40,16 @@ func main() {
 		Encrypt:  0x0,
 		TranID:   0x2efe,
 		UID:      0x18ae358,
-		SourceID: 0x1000000,
-		DestID:   0x0,
+		SourceID: 0x1500000,
+		DestID:   0x1112,
 		MeterID:  [24]byte{'r', 'o', 'o', 't'},
 		Port:     0x0,
 		Empty:    0x0,
 		MsgType:  0x1f,
 		MsgLen:   0xb9,
-		Content: []byte{},
+		Content:  []byte{},
 	}
-	data := make([]byte,a.MsgLen)
+	data := make([]byte, a.MsgLen)
 	fmt.Println(int(a.MsgLen))
 	data[0] = unionVersionComp(&a)
 	data[1] = unionTcpSpiEncrypt(&a)

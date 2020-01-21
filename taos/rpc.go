@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -16,9 +18,10 @@ var reqProtocolMap = map[int]protocolBuilder{
 }
 
 type RpcProtocol struct {
+	sync.RWMutex
 	EncodePassword []byte //16
-	BaseMsg        []byte //base on connect
 	DB             [117]byte
+	header         *STaosHeader
 }
 type STaosHeader struct {
 	Version  byte //4
@@ -34,18 +37,30 @@ type STaosHeader struct {
 	Port     uint16
 	Empty    byte
 	MsgType  uint8
-	MsgLen   uint32 //185初始总数据长度  其他在此基础上加content 具体见taosmsg.h
-	//Content  []byte
+	MsgLen   uint32 //185初始总数据长度  48基础线程信息+117数据库信息+4时间戳+16位秘钥
+	Content  []byte
 }
 
 func (rpcProtocol *RpcProtocol) GetReqMsg(MsgType int, content []byte) ([]byte, error) {
+	rpcProtocol.Lock()
+	defer rpcProtocol.Unlock()
 	builder := reqProtocolMap[MsgType]
 	return builder(*rpcProtocol, content)
 }
-func (rpcProtocol *RpcProtocol) InitMsgBytes(header STaosHeader) {
-	var data = make([]byte, header.MsgLen)
-	data[0] = rpcProtocol.unionVersionComp(&header)
-	data[1] = rpcProtocol.unionTcpSpiEncrypt(&header)
+
+func (rpcProtocol *RpcProtocol) buildMsg() ([]byte, error) {
+
+	if rpcProtocol.header == nil {
+		return nil, errors.New("STaosHeader is nil")
+	}
+	contentLen := len(rpcProtocol.header.Content)
+	rpcProtocol.header.TranID += 1
+	rpcProtocol.header.MsgLen = uint32(48 + 117 + contentLen + 4 + 16)
+	//48基础线程信息+117数据库信息+4时间戳+16位秘钥 = 185
+	var data = make([]byte, rpcProtocol.header.MsgLen)
+	var header = rpcProtocol.header
+	data[0] = rpcProtocol.unionVersionComp()
+	data[1] = rpcProtocol.unionTcpSpiEncrypt()
 	binary.LittleEndian.PutUint16(data[2:4], header.TranID)
 	binary.LittleEndian.PutUint32(data[4:8], header.UID)
 	binary.LittleEndian.PutUint32(data[8:12], header.SourceID)
@@ -57,20 +72,28 @@ func (rpcProtocol *RpcProtocol) InitMsgBytes(header STaosHeader) {
 	data[42] = header.Empty
 	data[43] = header.MsgType
 	binary.BigEndian.PutUint32(data[44:48], header.MsgLen)
-	fmt.Printf("% x", data)
-	copy(rpcProtocol.BaseMsg, data)
+	for i := 0; i < 117; i++ {
+		data[48+i] = rpcProtocol.DB[i]
+	}
+	for i := 0; i < contentLen; i++ {
+		data[185+i] = rpcProtocol.header.Content[i]
+	}
+	err := rpcProtocol.addDigest(data)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
-
-func (rpcProtocol *RpcProtocol) unionVersionComp(header *STaosHeader) byte {
-	low := header.Version & 0xf
-	high := header.Comp & 0xf
+func (rpcProtocol *RpcProtocol) unionVersionComp() byte {
+	low := rpcProtocol.header.Version & 0xf
+	high := rpcProtocol.header.Comp & 0xf
 	return high<<4 + low
 }
 
-func (rpcProtocol *RpcProtocol) unionTcpSpiEncrypt(header *STaosHeader) byte {
-	low := header.Tcp & 3
-	mid := header.Spi & 7
-	high := header.Encrypt & 7
+func (rpcProtocol *RpcProtocol) unionTcpSpiEncrypt() byte {
+	low := rpcProtocol.header.Tcp & 3
+	mid := rpcProtocol.header.Spi & 7
+	high := rpcProtocol.header.Encrypt & 7
 	return low + mid<<2 + high<<5
 }
 
@@ -111,20 +134,23 @@ func NewRpcProtocol(user, db string, encodePassword []byte) *RpcProtocol {
 		Tcp:      0x0,
 		Spi:      0x1,
 		Encrypt:  0x0,
-		TranID:   0x2efe,
-		UID:      0x18ae358,
+		TranID:   0x0,
+		UID:      rand.Uint32(),
 		SourceID: 0x1000000,
 		DestID:   0x0,
 		MeterID:  meterID,
 		Port:     0x0,
 		Empty:    0x0,
 		MsgType:  0x1f,
-		//MsgLen:   0xb9,
-		MsgLen: 48 + TSDB_METER_ID_LEN + 4 + 16, //48基础线程信息+117数据库信息+4时间戳+16位秘钥
-		//Content:  []byte{},
+		//48基础线程信息+117数据库信息+4时间戳+16位秘钥
+		MsgLen:  48 + TSDB_METER_ID_LEN + 4 + 16,
+		Content: []byte{},
 	}
 	rpcProtocol.EncodePassword = encodePassword
 	rpcProtocol.DB = [117]byte{}
-	rpcProtocol.InitMsgBytes(initHeader)
+	for i := range db {
+		rpcProtocol.DB[i] = db[i]
+	}
+	rpcProtocol.header = &initHeader
 	return &rpcProtocol
 }
