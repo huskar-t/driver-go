@@ -28,6 +28,7 @@ import (
 )
 
 type taosConn struct {
+	buf          buffer
 	netConn      net.Conn
 	rpcProtocol  *taos.RpcProtocol
 	affectedRows int

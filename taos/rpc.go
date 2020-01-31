@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -19,8 +18,8 @@ var reqProtocolMap = map[int]protocolBuilder{
 
 type RpcProtocol struct {
 	sync.RWMutex
-	EncodePassword []byte //16
-	DB             [117]byte
+	EncodePassword [TSDB_AUTH_LEN]byte //16
+	DB             [TSDB_METER_ID_LEN]byte
 	header         *STaosHeader
 }
 type STaosHeader struct {
@@ -33,7 +32,7 @@ type STaosHeader struct {
 	UID      uint32
 	SourceID uint32
 	DestID   uint32
-	MeterID  [24]byte
+	MeterID  [TSDB_UNI_LEN]byte
 	Port     uint16
 	Empty    byte
 	MsgType  uint8
@@ -49,14 +48,14 @@ func (rpcProtocol *RpcProtocol) GetReqMsg(MsgType int, content []byte) ([]byte, 
 }
 
 func (rpcProtocol *RpcProtocol) buildMsg() ([]byte, error) {
-
+	//请求字节码涉及到高低位操作无法直接用 binary包直接对齐
 	if rpcProtocol.header == nil {
 		return nil, errors.New("STaosHeader is nil")
 	}
 	contentLen := len(rpcProtocol.header.Content)
 	rpcProtocol.header.TranID += 1
-	rpcProtocol.header.MsgLen = uint32(48 + 117 + contentLen + 4 + 16)
-	//48基础线程信息+117数据库信息+4时间戳+16位秘钥 = 185
+	rpcProtocol.header.MsgLen = uint32(48 + TSDB_METER_ID_LEN + contentLen + 4 + 16)
+	//48基础信息+117数据库信息+4时间戳+16位秘钥 = 185
 	var data = make([]byte, rpcProtocol.header.MsgLen)
 	var header = rpcProtocol.header
 	data[0] = rpcProtocol.unionVersionComp()
@@ -65,7 +64,7 @@ func (rpcProtocol *RpcProtocol) buildMsg() ([]byte, error) {
 	binary.LittleEndian.PutUint32(data[4:8], header.UID)
 	binary.LittleEndian.PutUint32(data[8:12], header.SourceID)
 	binary.LittleEndian.PutUint32(data[12:16], header.DestID)
-	for i := 0; i < 24; i++ {
+	for i := 0; i < TSDB_UNI_LEN; i++ {
 		data[16+i] = header.MeterID[i]
 	}
 	binary.LittleEndian.PutUint16(data[40:42], header.Port)
@@ -76,7 +75,7 @@ func (rpcProtocol *RpcProtocol) buildMsg() ([]byte, error) {
 		data[48+i] = rpcProtocol.DB[i]
 	}
 	for i := 0; i < contentLen; i++ {
-		data[185+i] = rpcProtocol.header.Content[i]
+		data[165+i] = rpcProtocol.header.Content[i]
 	}
 	err := rpcProtocol.addDigest(data)
 	if err != nil {
@@ -91,9 +90,9 @@ func (rpcProtocol *RpcProtocol) unionVersionComp() byte {
 }
 
 func (rpcProtocol *RpcProtocol) unionTcpSpiEncrypt() byte {
-	low := rpcProtocol.header.Tcp & 3
-	mid := rpcProtocol.header.Spi & 7
-	high := rpcProtocol.header.Encrypt & 7
+	low := rpcProtocol.header.Tcp & 0x3
+	mid := rpcProtocol.header.Spi & 0x7
+	high := rpcProtocol.header.Encrypt & 0x7
 	return low + mid<<2 + high<<5
 }
 
@@ -107,7 +106,6 @@ func (rpcProtocol *RpcProtocol) addDigest(data []byte) error {
 	now := time.Now()
 	unix := now.Unix()
 	binary.BigEndian.PutUint32(digestBuf, uint32(unix))
-	fmt.Printf("%2x", digestBuf)
 	h := md5.New()
 	h.Write(rpcProtocol.EncodePassword[:])
 	h.Write(data[:dataLen-16])
@@ -141,12 +139,14 @@ func NewRpcProtocol(user, db string, encodePassword []byte) *RpcProtocol {
 		MeterID:  meterID,
 		Port:     0x0,
 		Empty:    0x0,
-		MsgType:  0x1f,
+		MsgType:  TSDB_MSG_TYPE_CONNECT, //预先设置成TSDB_MSG_TYPE_CONNECT
 		//48基础线程信息+117数据库信息+4时间戳+16位秘钥
 		MsgLen:  48 + TSDB_METER_ID_LEN + 4 + 16,
 		Content: []byte{},
 	}
-	rpcProtocol.EncodePassword = encodePassword
+	for i := 0; i < TSDB_AUTH_LEN; i++ {
+		rpcProtocol.EncodePassword[i] = encodePassword[i]
+	}
 	rpcProtocol.DB = [117]byte{}
 	for i := range db {
 		rpcProtocol.DB[i] = db[i]

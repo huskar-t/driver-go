@@ -28,16 +28,17 @@ type connector struct {
 func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
 	var err error
 	// New taosConn
-	mc := &taosConn{
+	tc := &taosConn{
 		cfg:       c.cfg,
 		parseTime: c.cfg.parseTime,
 	}
 	//build protocol
-	err = mc.taosConnect(ctx)
+	err = tc.taosConnect(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return mc, nil
+	tc.buf = newBuffer(tc.netConn)
+	return tc, nil
 }
 
 // Driver implements driver.Connector interface.

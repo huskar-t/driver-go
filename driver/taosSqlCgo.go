@@ -63,7 +63,9 @@ func (tc *taosConn) taosConnect(ctx context.Context) error {
 	h := md5.New()
 	h.Write([]byte(pass))
 	encodePassword := h.Sum(nil)
-
+	if len(encodePassword) != taos.TSDB_AUTH_LEN {
+		return taos.GetErrorStr(taos.TSDB_CODE_INVALID_ACCT)
+	}
 	//check port
 	if tc.cfg.port == 0 {
 		tc.cfg.port = 6030
